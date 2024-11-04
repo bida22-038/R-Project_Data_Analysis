@@ -1,0 +1,882 @@
+---
+title: "LTCUSD Market Data Analysis using Gemini Data"
+author: "Mmopiemang Mmopiemang"
+format: 
+  html:
+    
+    toc: true
+    toc-title: "Table of Contents"
+    toc-location: left-body
+    toc-depth: 3
+    toc-expand: 2
+    html_document:
+    number_sections: true
+    code-fold: true
+
+execute:
+  message: false
+  warning: false
+  echo: false
+  results: hide
+  error: false
+  
+runtime:
+  shiny
+---
+
+# Introduction
+
+This report contains 8 chapters that outline the various steps in the Knowledge Discovery with R in order to comprehend and extract insights from the *Gemini_LTCUSD_2020* dataset. The end results of this process according to Wickham & Çetinkaya-Rundel are:
+
+1.  **Data Understanding & Preprocessing**: Conduct exploratory data analysis in order to understand the contents and structure of the dataset. This end result also aims to detect and resolve any anomalies and inconsistencies to improve overall quality and consistency.
+2.  **Data Manipulation**: Perform data tidying and various transformation practices in order to restructure the dataset into a uniform format for seamless data analysis.
+3.  **Data Visualization**: Using clean & transformed data to create visual representations of relationships, hidden patterns and trends .
+4.  **Data Analysis**: Analyzing visual representations & statistical metrics to represent them in reports for easier understanding by high-level managers.
+
+The dataset consists of cryptocurrency trading data from the Gemini platform, focusing on Litecoin (LTC) trading against the US Dollar (USD) in 2020. It includes 8 variables:
+
+1.  **Unix Timestamp**: The trade’s time in UNIX format.
+2.  **Date**: The date and time when the trade occurred.
+3.  **Symbol**: The pair of currencies involved, specifically LTCUSD.
+4.  **Open**: Litecoin’s price at the start of the trading window.
+5.  **High**: The highest Litecoin price within the trading window.
+6.  **Low**: The lowest Litecoin price in the same period.
+7.  **Close**: Litecoin’s price at the close of the trading window.
+8.  **Volume**: The amount of Litecoin traded in the period.
+
+The key focus areas of this report include LTCUSD cryptocurrency market analysis with specific objectives centered on **Pattern Recognition**, **Trend Forecasting**, and **Time-Series Analysis** to derive meaningful insights.
+
+The **Close** column will be the main focus during this analysis report. According to Shen & Zheng, it reflects the combined decision made by all traders before the window closes for the day. This makes market knowledge discovery easier.
+
+# Chapter 1
+
+## 1.1 Data Exploration & Loading
+
+### 1.1.1 Data Loading
+
+The necessary libraries are required before any analysis can commence. **tidyverse** for general data science tasks, **dplyr** for efficient data wrangling, **DT** for creating interactive tables, **lubricate** for handling dates and times, **zoo** for time-series analysis and operations ,and **skimr** for generating summary statistics *(Grolemund, G., & Wickham, H. 2017)*. Other libraries are mentioned below:
+
+- ggplot2 (to visualize data)
+- plotly (to enable interaction in data visualizations)
+- tidyr
+- purrr
+- treemapify
+- shiny
+- shinydashboard
+- forecast
+
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+library(tidyverse)
+library(dplyr)
+library(DT)
+library(lubridate)
+library(skimr)
+library(zoo)
+library(ggplot2)
+library(plotly)
+library(tidyr)
+library(purrr)
+library(treemapify)
+library(shiny)
+library(shinydashboard)
+library(forecast)
+
+```
+
+```{r}
+
+```
+
+The dataset is loaded using read.csv() in base R.
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+gemini_data <- read.csv("gemini_LTCUSD_2020_1min.csv")
+```
+
+### 1.1.2 Data Exploration
+
+The dataset is located in the same project directory as the .qmd file, making the file path more concise and organized.
+
+Afterwards, the contents, structure and statistics of the dataset are to be checked.
+
+-   head() provides a snippet of the overall dataset, by outputting the first 6 rows.
+-   dim() indicates the shape of the dataset (i.e., the number of rows and columns)
+-   str() displays the overall structure of the dataset (i.e., each column's datatype, name and first 6 rows.)
+-   skim(), from the *skimr* package provides a comprehensive summary statistics of all columns (datatype, measures of central tendency, measures of variation, distributions). (James et. al, 2013)
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+
+# First 6 rows as a datatable
+head_gemini_data <- datatable(head(gemini_data))
+
+# Dimensions (rows and columns) as a datatable
+dim_gemini_data <- datatable(data.frame(Dimensions = dim(gemini_data)))
+
+# Capture structure output as a character vector, then convert it into a datatable
+str_output <- capture.output(str(gemini_data))
+str_gemini_data <- datatable(data.frame(Structure = str_output))
+
+# Summary statistics of the data using skimr, converted into a datatable
+summary_gemini_data <- skim(gemini_data)
+summary_gemini_df <- datatable(as.data.frame(summary_gemini_data))
+
+```
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+head_gemini_data
+dim_gemini_data
+
+summary_gemini_df
+```
+
+## 1.2 Data Cleaning
+
+### 1.2.1 Handling Missing Data
+
+Firstly, the dataset undergoes omission or imputation of missing data. This is dependent on the number of missing values per variable. If the frequency of missing values per variable is high, omission may be used, taking into account the size of the dataset. This can be checked using "is.na()"
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+sum(is.na(gemini_data))
+```
+
+The frequency of missing values per variable can be checked by nesting is.na() in colSums().
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+colSums(is.na(gemini_data))
+```
+
+Since there are no missing values, there is no need for omission or imputation.
+
+### 1.2.2 Handling Data Inconsistencies
+
+The following variables have been assigned incorrect datatypes: "Unix.Timestamp", "Date" & "Symbol".
+
+1.  "Symbol" will be assigned the factor datatype, for the values to be considered categorical.
+2.  "Unix.Timestamp" & "Date" will be assigned the POSIXct class and Date datatype respectively for proper date-time manipulation.
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+
+gemini_data$Unix.Timestamp <- as.POSIXct(gemini_data$Unix.Timestamp, origin = "1970-01-01")
+gemini_data$Date <- mdy_hm(gemini_data$Date)
+gemini_data$Symbol <- as.factor(gemini_data$Symbol)
+
+```
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+skim(gemini_data)
+```
+
+The month was then extracted from the full "date" column, and used to create a new "Month" column. The newly created "Month" column was used to create a "Quarter" column which ranges from "Q1" to "Q4".
+
+- January, February & March are assigned to the first quarter.
+- April, May & June are assigned to the second quarter.
+- July, August, September are assigned to the third quarter.
+- October, November & December are assigned to the fourth quarter.
+
+
+```{r}
+gemini_data <- gemini_data %>%
+  mutate(
+    Month = month(Date, label = TRUE),  # Extract the month and label it as abbreviated names
+    Quarter = case_when(
+      month(Date) %in% 1:3  ~ "Q1",    # Jan, Feb, Mar
+      month(Date) %in% 4:6  ~ "Q2",    # Apr, May, Jun
+      month(Date) %in% 7:9  ~ "Q3",    # Jul, Aug, Sep
+      month(Date) %in% 10:12 ~ "Q4"    # Oct, Nov, Dec
+    )
+  )
+```
+
+### 1.2.4 Detection and Handling Outliers using IQR
+
+In the market analysis, traditional outlier detection methods such as the *Z-score approach*, *the Interquartile Range (IQR) approach*, and *moving averages approach* are considered ineffective for handling the presence of outliers. These methods rely on normally distributed data, however, financial market data is volatile and experiences sudden price spikes (Iglewicz & Hoaglin, 1993),thus has no standard distribution. Handling outliers in market data normally results in discarding price spikes that represent genuine market behavior rather than extreme data points that affect statistics. Thus, instead of being viewed as anomalies, these price spikes should be considered as normal market events that indicate financial market volatility, hence should not be discarded in analysis.
+
+The code is just an illustration on how outliers can be detected using **IQR Approach**. It calculates the interquantile range (difference between the third quantile and the first quantile.). The IQR is applied in extracting the upper and lower bound used in outlier detection. The threshold used in bound calculation (1.5) is a universal threshold applied in outlier detection using IQR. This balances discovery of extreme points and identification of normal data points.
+
+- The lower bound is calculated by subtracting the product of the IQR and the threshold (1.5), from the first quantile.
+- The upper bound is calculated by subtracting the product of the IQR and the threshold from the third quantile.
+
+The threshold used in bound calculation (1.5) is a universal threshold applied in outlier detection using IQR. This balances discovery of extreme points and identification of normal data points.
+The code filters any data point that is outside of the range (i.e., the data point’s value is less than the lower bound or greater than the upper bound.)
+Below are boxplots of Closing Price showing before and after outlier handling:
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+
+remove_outliers_iqr <- function(data, column_name) {
+  # Calculate Q1 and Q3
+  quantile_one <- quantile(data[[column_name]], 0.25, na.rm = TRUE)
+  quantile_three <- quantile(data[[column_name]], 0.75, na.rm = TRUE)
+  
+  # Calculate IQR
+  interquartile_range <- IQR(data[[column_name]], na.rm = TRUE)  
+  
+  # Define lower and upper bounds
+  lower_bound <- quantile_one - 1.5 * interquartile_range
+  upper_bound <- quantile_three + 1.5 * interquartile_range
+  
+  # Filter outliers
+  outliers_DF <- data %>% 
+    filter(data[[column_name]] < lower_bound | data[[column_name]] > upper_bound)
+  
+
+  
+  # Remove outliers from the dataset
+  cleaned_data <- data %>% filter(data[[column_name]] >= lower_bound & data[[column_name]] <= upper_bound)
+  
+  return(cleaned_data)
+}
+
+
+
+```
+
+```{r}
+columns_to_clean <- c("Volume", "Close", "High","Low","Open") 
+gemini_copy <- gemini_data
+
+for (column in columns_to_clean) {
+  gemini_copy <- remove_outliers_iqr(gemini_copy, column)
+}
+
+```
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+
+
+# Box plot code using dataset with outliers
+boxplot(gemini_data$Close, main = "Boxplot of Closing Price", ylab = "Closing Price")
+
+```
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+
+# Box plot using dataset without outliers
+boxplot(gemini_copy$Close, main = "Boxplot of Closing Price", ylab = "Closing Price")
+
+```
+
+The visuals below display the boxplots for closing price before and after outlier handling:
+
+::::: column-margin
+:::: content
+::: layout-ncol-2
+![Before Outlier Handling](Outlier%20Handling%20Before.png){fig-align="left" width="290"} **Figure 1:** Before Outlier Handling
+
+![After Outlier Handling](Outlier%20Handling%20After.png){fig-align="right" width="296"} **Figure 2:** After Outlier Handling
+:::
+::::
+:::::
+
+# Chapter 2 - Manipulation via Functional Programming
+
+## 2.1 Data Manipulation Functions
+
+The following are functions created to perform data manipulation using dplyr, zoo and purrr:
+
+-   calculate_daily_return
+-   calculate_volatility
+-   resample_data
+-   calculate_correlation_matrix
+-   calculate_column_means
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+calculate_daily_return <- function(data) {
+  data %>%
+    mutate(Daily_Return = (Close / lag(Close) - 1) * 100) 
+    # Returns in percentage
+}
+
+```
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+calculate_volatility <- function(data, window = 7) {
+  data %>%
+    arrange(Date) %>%
+    mutate(Volatility = rollapply(Close, width = window, 
+                                  FUN = sd, 
+                                  fill = NA, align = "right"))
+}
+
+```
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+resample_data <- function(data, period = "weekly") {
+  data %>%
+    mutate(Period = case_when(
+      period == "weekly" ~ lubridate::floor_date(Date, "week"),
+      period == "monthly" ~ lubridate::floor_date(Date, "month"),
+      TRUE ~ Date
+    )) %>%
+    group_by(Period) %>%
+    summarise(
+      Open = first(Open),
+      High = max(High),
+      Low = min(Low),
+      Close = last(Close),
+      Volume = sum(Volume),
+      .groups = "drop"
+    )
+}
+
+
+```
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+calculate_correlation_matrix <- function(data, columns) {
+  cor(data[columns], use = "pairwise.complete.obs") %>%
+    as.data.frame() %>%
+    rownames_to_column(var = "Variable")
+}
+
+```
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+# Function to calculate the mean of specified columns
+calculate_column_means <- function(data, columns) {
+  data %>%
+    select(all_of(columns)) %>%
+    map_dbl(mean, na.rm = TRUE) # Calculate mean while ignoring NA values
+}
+
+```
+
+## 2.2 Function Execution and Explanation
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+gemini_data <- calculate_daily_return(gemini_data)
+
+```
+
+1.  *calculate_daily_return* aims to track assets price fluctuations everyday using the current and preceding closing prices. It implements the **lag()** function in dplyr to extract the price from the previous day in the formula below:
+
+$$
+Daily Return=( \frac {PreviousClosePrice} {CurrentClosePrice} − 1)×100
+$$
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+gemini_data <- calculate_volatility(gemini_data)
+
+```
+
+2.  *calculate_volatility* tracks price fluctuations in a specified time window, which is 7 days. The function arranges the data according to the date, then uses the rollapply() function to calculate the rolling volatility. Below are the arguments and their respective explanation:
+
+-   First argument is the numeric column for which rollapply() is applied. (i.e. **Close** in gemini_data)
+
+-   **width** requires the desired size of the window, for which is predefined in the function definition as "window = 7".
+
+-   **the FUN** arguments requires the function applied in every window. **sd** (standard deviation) and volatility are related. A high standard deviation indicates high volatility in the market. (Brooks, 2014)
+
+-   **fill = NA** replaces all missing values in the column with NA.
+
+-   **align = right** allows the function to calculate the standard deviation between the current and previous day. A right-aligned window ends with the current day. (Tsay, 2010)
+
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+weekly_data <- resample_data(gemini_data, period = "weekly")
+
+```
+
+3.  *resample_data* function aggregates and summarizes all data per specified time period. Below is the function process flow:
+
+    -   A new column called *Period* is created based on the aggregation level stated in the function definition (i.e., "daily", "weekly" or "monthly").
+
+    -   The function then groups the data based on the aggregation level stated (i.e., using the **group_by** function.
+
+    -   Finally, it summarizes each time period using the following summary statistics.
+
+        -   The opening price of the time period
+
+        -   The highest price during the stated period.
+
+        -   The lowest price during the stated period.
+
+        -   The closing price of the time period, and
+
+        -   The total volume of LTCUSD traded within the period
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| results: asis
+
+correlation_matrix <- calculate_correlation_matrix(gemini_data, c("Open", "High", "Low", "Close"))
+
+as.data.frame(correlation_matrix)
+
+```
+
+4.  *calculate_correlation_matrix* creates a correlation matrix based off the input columns (i.e., Open, Close, Low, High). The function utilizes **cor()** where pairwise correlation is applied only if both variables don't have missing values (i.e., the function ignores observations with blanks and NA). The correlation matrix is then converted into a dataframe, where the variables names are readable and labelled for easier interpretability.
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| results: hide
+mean_values <- calculate_column_means(gemini_data, c("Open", "Close", "Volume"))
+
+```
+
+5.  **calculate_column_means** selects columns from the dataset based on argument input (in this case the numeric columns of gemini_data). It utilizes the map_dbl() function from the *purrr* package, to return the mean for each input column as **dbl** / a numeric value.
+
+# Chapter 3 - Visuals & Interpretation
+
+## 3.1 Data Visualization
+
+### 3.1.1 Scatter Plot showing relationship between Volume & Closing Price
+
+A sample of 400 rows, 100 per quarter, was used to reduce computer runtime and enhance interpretation and readability. Using *sample_n*, **sampled_data** was group by Quarter and from each quarter, the function sampled 100 rows then deactivated grouping to give the sample a uniform format, for easier visualization.
+
+```{r}
+sampled_data <- gemini_data %>%
+  group_by(`Quarter`) %>%
+  sample_n(100) %>%
+  ungroup()
+
+# Plot the sampled data
+plot_volume_close <- ggplot(sampled_data, aes(x = Volume, y = Close)) +
+  geom_point(color = "blue", alpha = 0.5) +
+  labs(
+    title = "Relationship Between Volume and Closing Price",
+    x = "Trading Volume",
+    y = "Closing Price (USD)",
+    caption = "Source: Gemini LTCUSD Data 2020"
+  ) +
+  theme_minimal()
+
+print(plot_volume_close)
+```
+
+#### 3.1.1.1 Scatter Plot Analysis
+
+There is limited spread of data points, as they lie on the y-axis, with no indication of exponential/proportional increase or decrease of Closing Price, as the Total Volume increase. This means the two variables have a little to no correlation between each other (**Total Volume does not affect the increase or decrease of closing prices.**). There is a saturation of data points at near the zero-point on the trading volume axis, indicating that low amounts of USD was traded for LTC. There are anomalies where the trading volume is high but the closing price is low. This could be an indication of a time period where particular economic events occurred that triggered the concept of panic buying and selling. This brings about a relationship : **An increase in misinformation or bad news concerning the cryptocurrency LTC leads to a decrease in closing prices** (Fama, 1970).
+
+### 3.1.2 Histogram showing distribution for Closing Prices
+
+The code uses geom_histogram, to display the distribution of the Closing Price column. The binwidth is set to 50 to show variance and spread of data points, as higher binwidths only few bars or a single bar.
+
+```{r}
+plot_close_distribution <- ggplot(gemini_data, aes(x = Close)) +
+  geom_histogram(binwidth = 5, fill = "blue", color = "black", alpha = 0.7) +
+  labs(
+    title = "Distribution of Litecoin Closing Prices",
+    x = "Closing Price (USD)",
+    y = "Frequency",
+    caption = "Source: Gemini LTCUSD Data 2020"
+  ) +
+  theme_minimal()
+
+print(plot_close_distribution)
+```
+
+#### 3.1.2.1 Histogram Analysis
+
+The histogram indicates a peak on the lower values of closing prices, indicating most trades are closed at very low prices. In statistical terms, the distribution of closing prices is **left-skewed**, which indicates that the Litecoin cryptocurrency is less favorable during trading. A left-skewed distribution has a right tail, which depicts low number of high closing prices, which could be an indication of **bullish market sentiment**. This phenomenon explains how investors are optimistic of the exponential increase in value of the cryptocurrency, thus buy more units. (Baker and Wurgler, 2007).
+
+### 3.1.3 Line Graph showing Closing Price trends
+
+The code visualizes plot a line graph of the Date of the observation vs the date's respective closing price. The theme_minimal() removes any background annotations for a clean, readable visual. *caption* adds a small text at the bottom-right corner (by default) as a brief descriptive statement.
+
+```{r}
+plot_close_over_time <- ggplot(gemini_data, aes(x = Date, y = Close)) +
+  geom_line(color = "blue") +
+  labs(
+    title = "Litecoin Closing Price Over Time",
+    x = "Date",
+    y = "Closing Price (USD)",
+    caption = "Source: Gemini LTCUSD Data 2020"
+  ) +
+  theme_minimal()
+
+print(plot_close_over_time)
+
+```
+
+#### 3.1.3.1 Line Graph Analysis
+
+-   There is an slight increase of the closing price between January 2020 and March 2020, before the price decreases. This may be a result of the global market crisis due the COVID-19, which lead to the market experiencing sudden high volatility (Corbet et al., 2020).
+
+-   The price hits a plateau between March 2020 and August 2020 before experiencing a slight fluctuation. This is an indication of market stabilization after the sudden emergence of COVID-19. This suggests that investors have accepted that Litecoin and other emerging cryptocurrencies can act as "hedges" against economic collapse, increasing interest in investing into more. (Bouri, et al., 2020).
+
+-   Between August 2020 and April 2021, there is continuous increase in closing price with sudden spikes appearing in January 2021, March 2021 and April 2021. This indicates an increased interest in cryptocurrency trading and investments by not only investors, but the general public as well. This sudden interest may be a result of investors uplifting and exalting the value of cyptocurrencies.
+
+### 3.1.4 Treemap for Volume per Month
+
+The chunk of code initializes by grouping the data by month. For each month, the total volume is calculated alongside the average closing price. **The treemap ggplot** code uses the total volume to attribute as area (the size of each square) and the average closing price as the color gradient/fill. **geom_treemap_text** assign each tree square which it's respective text (the month) applies text formatting (the fontface, color, text alignment and exponential growth.). **scale_fill_gradient** creates a color gradient scale to assign color level/transparency based on each month's average closing price.
+
+```{r}
+volume_by_month_data <- gemini_data %>%
+  group_by(Month) %>%
+  filter(format(Date, "%Y") == "2020") %>%
+  summarise(Total_Volume = sum(Volume, na.rm = TRUE),
+            Avg_Close = mean(Close, na.rm = TRUE))
+  
+
+# treemap
+plot_treemap_volume <- ggplot(volume_by_month_data, aes(area = Total_Volume, fill = Avg_Close, label = Month)) +
+  geom_treemap() +
+  geom_treemap_text(fontface = "italic", colour = "white", place = "centre", grow = TRUE) +
+  scale_fill_gradient(low = "lightblue", high = "blue") +
+  labs(
+    title = "Treemap of Total Volume Traded per Month (2020)",
+    fill = "Avg Closing Price (USD)",
+    caption = "Source: Gemini LTCUSD Data 2020"
+  ) +
+  theme_minimal()
+
+print(plot_treemap_volume)
+
+```
+
+### 3.1.5 Bar Chart showing Total Volume per Quarter in 2020
+
+The data spans from January 2020 to April 2021. The proper approach taken was to first filter the dataset to only obtain observations that match this condition : **If date has year value of 2020, add in aggregated table, otherwise ignore.** The filtered data was then summarized based on total volume per quarter.The code uses **geom_bar** to create a bar chart of the aggregated data. **stat="identity"** informs the code to extract the values of the Total Volume column instead of counting unique values. **scale_fill_manual()** allows the programmer to manually adjust the fill colors for each bar/pie slice.
+
+```{r}
+# Filter data to include only observations from 2020
+volume_by_quarter_2020 <- gemini_data %>%
+  filter(format(Date, "%Y") == "2020") %>%
+  group_by(Quarter) %>%
+  summarise(Total_Volume = sum(Volume, na.rm = TRUE))
+
+volume_by_month_data <- as.data.frame(volume_by_month_data)
+
+
+plot_volume_per_quarter <- ggplot(volume_by_quarter_2020, aes(x = Quarter, y = Total_Volume, fill = Quarter)) +
+  geom_bar(stat = "identity", width = 1) +
+  labs(
+    title = "Total Volume Traded per Quarter (2020)",
+    fill = "Quarter",
+    caption = "Source: Gemini LTCUSD Data 2020"
+  ) +
+  scale_fill_manual(values = c("Q1" = "#89CFF0", "Q2" = "#4682B4", "Q3" = "#1E90FF", "Q4" = "#0A3D62")) +
+  theme(legend.position = "right")
+
+print(plot_volume_per_quarter)
+
+
+```
+
+# Chapter 4 - Shiny Dashboard
+
+## 4.1 Dashboard Implementation
+
+```{r}
+str(volume_by_month_data)
+
+```
+
+The dashboard displays the plots above in a interactive format (i.e., uses Plotly to enable user interaction). The treemap visual cannot be displayed with interaction as **geom_TreemapText()** is a function that is not under the plotly library. The treemap will be displayed in it's original format.
+
+```{r}
+#| runtime : shiny
+
+ui <- dashboardPage(
+  dashboardHeader(title = "Litecoin Trading Analysis"),
+  dashboardSidebar(
+    sidebarMenu(
+      menuItem("Volume vs Closing Price", tabName = "vol_close", icon = icon("chart-points")),
+      menuItem("Closing Price Distribution", tabName = "close_dist", icon = icon("chart-bar")),
+      menuItem("Closing Price Over Time", tabName = "close_time", icon = icon("chart-line")),
+      menuItem("Quarterly Volume", tabName = "quarter_vol", icon = icon("chart-pie")),
+      menuItem("Insights", tabName = "insights", icon = icon("lightbulb"))
+    )
+  ),
+  dashboardBody(
+    tabItems(
+      tabItem(tabName = "vol_close",
+              h2("Volume vs Closing Price"),
+              selectInput("variable", "Choose a variable to compare with Closing Price:", 
+                          choices = c("Open", "High", "Low", "Volume")),
+              plotlyOutput("plot_volume_close")
+      ),
+      
+      
+      tabItem(tabName = "close_dist",
+              h2("Distribution of Closing Prices"),
+              plotlyOutput("plot_close_distribution")
+      ),
+      
+      
+      tabItem(tabName = "close_time",
+              h2("Closing Price Over Time"),
+              sliderInput("date_range", "Select Date Range:",
+                          min = as.Date("2020-01-01"), 
+                          max = as.Date("2021-04-30"), 
+                          value = c(as.Date("2020-01-01"), as.Date("2021-04-30")),
+                          timeFormat = "%Y-%m-%d"),
+              plotlyOutput("plot_close_over_time")
+      ),
+      
+      
+      tabItem(tabName = "quarter_vol",
+              h2("Quarterly Trading Volume"),
+              plotlyOutput("plot_volume_per_quarter")
+      ),
+      
+      
+      tabItem(tabName = "insights",
+              h2("Key Insights"),
+              p("1. The first visual shows a scatter plot that demonstrates the relationship between trading volume and closing price, which is a little to no correlation between the two variables."),
+              p("2. The second visual indicates a histogram of closing prices which demonstrates the frequency distribution and distribution shape for Litecoin's closing prices from Jan 2020 to April 2021. The visual shows a left-skewed distribution, which indicates a saturation of data points on lower closing prices."),
+              p("3. The line chart illustrates how Litecoin's closing price fluctuated throughout 2020. As seen, there is a gradual increase from Jan 2020 to Dec of 2020. As 2021 begins, the closing prices have a spike and sudden increase in value."),
+              p("4. The treemap visualization of monthly trading volumes highlights the distribution of trade volumes across months."),
+              p("5. The bar chart shows quarterly total trade volumes, helping in identifying seasonal trends.")
+      )
+    )
+  )
+)
+
+
+server <- function(input, output) {
+  
+  
+  output$plot_volume_close <- renderPlotly({
+    selected_variable <- input$variable
+    plot <- ggplot(gemini_data, aes_string(x = selected_variable, y = "Close")) +
+      geom_point() +
+      labs(title = paste("Closing Price vs", selected_variable))
+    ggplotly(plot)
+  })
+  
+  
+  output$plot_close_distribution <- renderPlotly({
+    ggplotly(plot_close_distribution)
+  })
+  
+  
+  output$plot_close_over_time <- renderPlotly({
+    date_filtered_data <- gemini_data %>%
+      filter(Date >= input$date_range[1] & Date <= input$date_range[2])
+    
+    plot <- ggplot(date_filtered_data, aes(x = Date, y = Close)) +
+      geom_line() +
+      labs(title = "Closing Price Over Time")
+    
+    ggplotly(plot)
+  })
+  
+  
+  output$plot_volume_per_quarter <- renderPlotly({
+    ggplotly(plot_volume_per_quarter)
+  })
+}
+
+# Run the app
+shinyApp(ui = ui, server = server)
+
+
+```
+
+## 4.2 Implementation Explanation
+
+The user interface (**ui**), entails of the title, sidebar and body. All code that entails these components is enclosed in the **dashboardPage** function.
+
+1.  Using dashboardHeader(), the title of the dashboard can be stated. It is to be enclosed in quotes and placed in the **title** argument.
+
+2.  A sidebar with tabs is created by enclosing **menuItems** in the **sidebarMenu()** function, which is also enclosed in the main function, **dashboardSidebar()**. Each menuItem has a **tabName** that links **tabItems** within the **dashboardBody**, to display each respective body component, depending on which one was selected.
+
+3.  **dashboardBody()** enclosed tabs linked to **menuItems** in **dashboardSidebar**.
+
+    1.  Two tabs accommodate for selective input using dropdown menu and slider. Those are the:
+        1.  **Scatter Plot** showing the relationship between Volume and Closing Price. The tab has a dropdown feature enabled by **selectInput**. The dropdown contains a list of other numeric variables (i.e., Open, Low, High). The aim is to detect the relationship between the volume of cryptocurrency and other numeric variables.
+        2.  The **Line Plot** shows the trend of closing prices over time (between Dec 2019 and April 2021). The tab has a slider that enables the user to select the range of date they would like to analyse. This is enabled by evoking the **sliderInput**() function.
+    2.  Other tabs in the body include showing the distribution of closing prices using a histogram, and a bar chart showing the average closing price per month.
+
+4.  The **server** function outlines the actual logic that enables the visuals to be displayed when the tab is opened. Each visual's code was saved to a variable to be then used in making them interactive using plotly. Each visual's variable is enclosed around **renderPlotly** to allow the server to render the interactive plots.
+
+5.  The dashboard app is then run by evoking **shinyApp()** and apply **ui** and **server** as arguments.
+
+# Chapter 5 - Time-Series Analysis
+
+## 5.1 Test-Train Data Splitting
+
+```{r}
+training_data_size <- floor(0.8 * nrow(gemini_data))
+training_data <- gemini_data[1:training_data_size, ]
+testing_data <- gemini_data[(training_data_size + 1):nrow(gemini_data), ]
+```
+
+The code aims to create a 80-20 split of the data. The training data will be 80% of the data and 20% will be testing data, to confirm accuracy of model prediction. Initially, the size is determined by multiplying the training proportion (80%) with the number of rows of the original dataset. The size is then used to extract both training data and testing data.
+
+## 5.2 Additive Decomposition
+
+```{r}
+time_series_data <- ts(training_data$Close, frequency = 1440)
+decomposed_data_ts <- decompose(time_series_data)
+plot(decomposed_data_ts)
+```
+
+The Close column in the training is then converted into a time-series object with a frequency of 1440, to extract minute-level data to uses such in accurate predictions. Using **decompose()**, the new time-series object is then broken down into trend, random, observed and seasonal components, to detect seasonal patterns, and making forecasting easier and quicker.
+
+## 5.3 Time-Series Forecasting using ARIMA
+
+```{r}
+fitting_arima_data <- auto.arima(time_series_data)
+forecast_30_arima <- forecast(fitting_arima_data, h = nrow(testing_data))
+plot(forecast_30_arima)
+
+```
+
+Instead of testing each individual ARIMA model for better accuracy, **auto.arima()** automates the process and selects the best model based on the input data (i.e., the decomposed training data).**forecast()** then created a forecast ,same size as the testing data, to predict future closing prices.
+
+The blue line indicates the forecast line, which is the values predicted using the chosen ARIMA model from **auto.arima()**.
+
+## 5.5 ARIMA Forecast Accuracy Evaluation
+
+```{r}
+accuracy_metrics <- accuracy(forecast_30_arima, testing_data$Close)
+accuracy_df <- as.data.frame(accuracy_metrics)
+
+view(accuracy_df)
+
+```
+accuracy() is then used to extract accuracy metrics to determine how well the model correctly predicted the values. **accuracy()** provides the following metrics:
+
+1.  **Mean Absolute Error (MAE) & Root Mean Squared Error (RMSE)** , which determines the magnitude of the forecast errors. A low MAE suggests the forecast is near-accurate. A low RMSE show accurate predications and that the model used fits the data.
+
+2.  **Mean Absolute Percentage Error (MAPE)** shows error of predictions in the form of a percentage, for easier interpretation. A low MAPE means the model provided near-accurate predictions.
+
+3.  **Mean Percentage Error (MPE)** determines whether the model overestimated or underestimated the values from the training data. A positive MPE indicates overestimation.
+
+Using the metrics below, and the information above, they suggest that the ARIMA model performed poorly with test data, compared with the training data's metrics. 
+
+
+
+
+# Chapter 6 - Applications of Market Analysis
+
+## 6.1 Importance of Market Analysis & Recommendations
+
+Market analysis is essential in aiding the decision making process for trading platform such as Gemini. By conducting such a practice, Gemini can discover hidden patterns and user behavior, to extract meaningful insights that can paint a picture of what they adjust and improve on, not only for the platform but to improve their approaches in conducting business.
+
+Insights obtained from market data analysis can be used to derive new features to add into their platform that are either a unique selling point or they perform better in their platform than in other platforms. Adding on new features can ultimately allow Gemini to provide access to trade Decentralized Finance, an emerging area in cryptocurrency catering a broader spectrum of users. Performing external analysis on other platforms, Gemini can benchmark and devise new and better pricing fees that are proportional to user's demand, giving them an competitive advantage.
+
+Analysis not only benefits Gemini as a business, but insights can be used by users to learn about the risks of cryptocurrency trading and how to use the platform whilst adapting to changing economic states. This enables Gemini to be viewed as a transparent and trustworthy platform, enhancing trust and customer retention. (Crypto Engineer, 2024).
+
+This report recommends Gemini to implement the following:
+
+-   Integrating artificial intelligence and machine learning algorithms to conduct predictive analytics. This allows Gemini to predict market movement and behavior to then offer such information to their users, thus enabling responsible and smart trading.
+
+-   Adding tutorials and trading resources in the platform explaining key cryptocurrency terms and phenomenons as well as explaining the risks of cryptocurrency trading, enhancing user experience.
+
+# References
+
+-   Wickham, H. and Grolemund, G., 2017. *R for Data Science*. 1st ed. O'Reilly Media. Available at: <https://r4ds.had.co.nz/> \[Accessed 15 October 2024\].
+
+-   Williams, G.J, 2018. *The Essentials of Data Science: Knowledge Discovery Using R*. 1st ed. CRC Press. Available at: <https://doi.org/10.1201/9781315151458> \[Accessed 20 October 2024\].
+
+-   Hadi Rezaei, Hamidreza Faaljou, Gholamreza Mansourfar, *Stock price prediction using deep learning and frequency decomposition*, *Expert Systems with Applications*, Volume 169, 2021. Available at: <https://doi.org/10.1016/j.eswa.2020.114332>.
+
+-   Huang, Shian-Chang. (2017). *A Big Data Analysis System for Financial Trading*. Global Business and Finance Review, 22, 32-44. Available at: <https://doi.org/10.17549/gbfr.2017.22.3.32>.
+
+-   Grolemund, G., & Wickham, H. (2017). *R for Data Science: Import, Tidy, Transform, Visualize, and Model Data*. O'Reilly Media.
+
+-   Waring, E., et al. (2020). *skimr: Compact and Flexible Summaries of Data*. R package version 2.1.3.
+
+-   Bodie, Z., Kane, A., & Marcus, A. J. (2014). *Investments* (10th ed.). McGraw-Hill Education.
+
+-   Aggarwal, C. C. (2017). *Outlier Analysis* (2nd ed.). Springer.
+
+-   Iglewicz, B., & Hoaglin, D. C. (1993). *How to Detect and Handle Outliers*. ASQC Quality Press.
+
+-   Brooks, C., 2014. *Introductory Econometrics for Finance*. 3rd ed. Cambridge: Cambridge University Press.
+
+-   Tsay, R.S., 2010. *Analysis of Financial Time Series*. 3rd ed. New Jersey: Wiley.
+
+-   James, G., Witten, D., Hastie, T., & Tibshirani, R. (2013). *An Introduction to Statistical Learning with Applications in R*. Springer.
+
+-   Fama, E.F. (1970). *Efficient Capital Markets: A Review of Theory and Empirical Work*, The Journal of Finance, 25(2), pp. 383-417.
+
+-   Baker, M., & Wurgler, J. (2007). *Investor Sentiment in the Stock Market*, The Journal of Economic Perspectives, 21(2), pp. 129-151.
+
+-   Bouri, E., Molnár, P., Azzi, G., Roubaud, D., and Hagfors, L.I., 2020. *On the Hedge and Safe Haven Properties of Bitcoin: Is It Really More Than a Diversifier?* *Finance Research Letters*, 20, pp.192-198.
+
+-   Corbet, S., Larkin, C., and Lucey, B., 2020. *The Contagion Effects of the COVID-19 Pandemic: Evidence from Gold and Cryptocurrencies*. *Finance Research Letters*, 35, p.101554.
+
+-   Hyndman, R.J. and Koehler, A.B. (2006). *Another Look at Measures of Forecast Accuracy*. *International Journal of Forecasting*, 22(4), pp. 679-688.
+
+-   Hyndman, R.J. and Athanasopoulos, G. (2018). *Forecasting: Principles and Practice*, 2nd ed., OTexts, Melbourne, Australia. Section 3.4 "Evaluating Forecast Accuracy."
+
+-   Sahay, A. M. (2021). *Business Analytics: A Data-Driven Decision-Making Approach for Business, Volume II*. New York: Springer.
+
+-   Crypto Engineer (2024). *Cryptocurrency Investing: The Fundamental Analysis Guide*. Cambridge: PublishDrive.
+
+-   Huang, L. (2023). *Data and Intuition: Good Decisions Need Both*. Harvard Business Publishing.
